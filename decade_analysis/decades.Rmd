@@ -1,0 +1,163 @@
+---
+title: "Decades Playlist Analysis"
+author: "Hayley Arader"
+date: "April 7, 2019"
+output: html_document
+---
+
+Spotify has a really accessible API!! In this script I use [spotifyr](https://www.rcharlie.com/spotifyr/), which integrates with the Spotify Web API using R, to analyze how songs in Spotify's Decades Playlists differ from each other.
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+################################################################################
+## Setup #######################################################################
+################################################################################
+
+library(spotifyr)
+library(tidyverse)
+library(stringr)
+library(ggplot2)
+
+# I've stored these in my environment
+client_id <- Sys.getenv("SPOTIFY_CLIENT_ID")
+client_secret <- Sys.getenv("SPOTIFY_CLIENT_SECRET")
+
+# Authenticate!
+access_token <- get_spotify_access_token(client_id = client_id,
+                                         client_secret = client_secret)
+
+################################################################################
+## Plotting Utils ##############################################################
+################################################################################
+
+# Set a theme for plots :)
+theme_hayley <- function(...) {
+
+  # first we'll want to update all text
+  ggplot2::update_geom_defaults(
+    "text",
+    list(family = "Raleway", size = 4, fontface = "plain", color = "black",
+      hjust = .5, vjust = .5))
+
+  # return theme
+  theme_bw() +
+    theme(plot.background = ggplot2::element_rect(fill = "white"),
+          panel.background = ggplot2::element_rect(fill = "white"),
+          panel.border = ggplot2::element_blank(),
+          text = element_text(family = "Raleway"))
+
+}
+
+# overwrite ggplot
+ggplot <- function(...) ggplot2::ggplot(...) + theme_hayley()
+
+```
+
+## Accessing the data
+
+We can search Spotify for the playlists we're looking for, and filter to the playlist owner. In this case, we're looking for Spotify's Decades playlists, which all begin with `All Out`, and are owned by `Spotify`.
+```{r search}
+# Spotify has decades playlists, grab them here
+playlists <- search_spotify("All Out", type = c("playlist")) %>%
+  filter(owner.display_name == "Spotify", str_detect(name, "All Out"))
+```
+
+Now we'll read in data about each song in each playlist
+````{r read}
+# Now read in information about the songs in each playlist
+playlist_data <- lapply(seq_along(playlists$id), function(i) {
+  message("Reading in songs from ", playlists$name[i])
+  get_playlist_tracks(playlists$id[i]) %>%
+    pull(track.id) %>%
+    get_track_audio_features() %>%
+    mutate(name = playlists$name[i])
+})
+```
+
+```{r plot, include = FALSE}
+################################################################################
+## Plotting Functions ##########################################################
+################################################################################
+
+# Grab the years of the playlists
+years <- str_sub(seq(from = 1950, to = 2010, by = 10), 3, 4)
+
+# Now grab the different metrics spotify provides us with
+metrics <- colnames(playlist_data[[1]])[1:11]
+
+# A function to wrangle the playlist data 
+# Assumes `playlist_data` is a list of data
+# @param data list of data, expects `playlist_data`
+# @param metrics_to_plot character of which metrics we're interested in plotting
+wrangle_data <- function(data, metrics_to_plot) {
+  data %>%
+    bind_rows() %>%
+    # make the data long
+    tidyr::gather(metric, stat, metrics) %>%
+    group_by(name, metric) %>%
+    # Find stats
+    summarize(mean = mean(stat), sd = sd(stat)) %>%
+    # let's order by year
+    ungroup() %>%
+    filter(metric %in% metrics_to_plot) %>%
+    mutate(name = factor(name, levels = paste0("All Out ", years, "s")),
+           metric = str_to_title(metric))
+}
+
+# Function to plot the wrangled data
+# @param data dataframe the wrangled data from `wrangle_data`
+plot_data <- function(data) {
+ data %>%
+   ggplot(aes(x = name, color = mean)) +
+    # plot error bars
+    geom_segment(aes(y = mean - sd, yend = mean + sd, xend = name),
+                 color = "grey50", alpha = .5, size = 3) +
+    geom_point(aes(y = mean), size = 7) +
+    labs(x = "Decade", y = "Mean Value in Playlist") +
+    guides(color = F) +
+    expand_limits(x = c(-1, 1)) +
+    scale_x_discrete(label = function(x) {
+      paste0("'", stringr::str_remove(x, "All Out "))
+    }) +
+    theme(axis.text = element_text(size = 12),
+          strip.text = element_text(face = "bold")) +
+    facet_wrap(~metric, scales = "free_y")
+}
+
+# Put functions together
+# @param data list of data, expects `playlist_data`
+# @param metrics_to_plot character of which metrics we're interested in plotting
+plot_metrics <- function(data, metrics_to_plot) {
+  data %>%
+    wrangle_data(metrics_to_plot) %>%
+    plot_data()
+}
+
+# Function to add an annotation explaining what's happening
+# in the group
+# @param p plot to add the metric to
+# @param metric character the name of the metric to add the annotation
+add_annotation <- function(p, metric) {
+  # dynamically find a yvalue that will make sense
+  yval <- (max(p$data$mean) - min(p$data$mean)) / 6
+  ymean <- mean(p$data$mean)
+  p +
+    annotate("label", x = 0, y = ymean,
+             label = paste0("Music with\nHigher Avg\n", str_to_title(metric)),
+             label.size = 0, family = "Raleway", lineheight = .8,
+             fontface = "bold") +
+    annotate("segment", x = 0, y = ymean + yval, yend = ymean + 2 * yval, xend = 0,
+             arrow = arrow(length = grid::unit(.25, "cm")), size = 1)
+}
+```
+
+```{r overall, echo = FALSE, warn = FALSE, message = FALSE}
+plot_metrics(playlist_data, metrics)
+```
+
+
+```{r specific, echo = FALSE, warn = FALSE, message = FALSE, results = 'asis'}
+lapply(c("valence", "danceability", "acousticness", "loudness"),
+       function(x) plot_metrics(playlist_data, x) %>% add_annotation(x))
+```
