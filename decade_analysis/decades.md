@@ -39,7 +39,7 @@ Let's look at all of the metrics, and how they're different across time.
 
 ### Metrics of Interest
 These are the metrics we're analyzing, as defined by [Spotify](https://developer.spotify.com/documentation/web-api/reference/tracks/get-audio-features/) (summaries of definitions below)
-- *danceability:** how suitable a track is for dancing based on a combination of musical elements including tempo, rhythm stability, beat strength, and overall regularity  
+- **danceability:** how suitable a track is for dancing based on a combination of musical elements including tempo, rhythm stability, beat strength, and overall regularity  
 - **energy:** a perceptual measure of intensity and activity  
 - **key:** estimated overall key of the track  
 - **loudness:** overall loudness of a track in decibels  
