@@ -54,7 +54,8 @@ These are the metrics we're analyzing, as defined by [Spotify](https://developer
 - **valence:** the musical positiveness conveyed by a track  
 - **tempo:** overall estimated tempo of a track in beats per minute  
 
-It looks like there is a particular interesting relationship between time and acousitcness, danceability, loudness, and valence!
+It looks like there is a particularly interesting relationship between time and acousitcness, danceability, loudness, and valence!
+
 
 ```r
 plot_metrics(playlist_data, metrics)
@@ -65,8 +66,10 @@ plot_metrics(playlist_data, metrics)
 It looks like there is a particular interesting relationship between time and acousticness, danceability, loudness, and valence! Let's look at these more closely.
 
 ### Acousticness
+
 ![plot of chunk acousticness](figure/acousticness-1.png)
-Music has gotten *less* acousticness since the '50s', but with an increased bump in acousticness in the '10s (and a big increase in variance) it might be making a comeback.
+
+Music has gotten *less* acoustic since the '50s', but with an increased bump in acousticness in the '10s (and a big increase in variance) it might be making a comeback.
 
 Here are the five most "acoustic" songs from '50s:
 
@@ -74,9 +77,16 @@ Here are the five most "acoustic" songs from '50s:
 ## Joining, by = "id"
 ```
 
-```
-## Error in .::knitr: unused argument (kable)
-```
+
+
+|Name                             |Artist       | Acousticness|
+|:--------------------------------|:------------|------------:|
+|Only You (And You Alone)         |The Platters |        0.956|
+|I Left My Heart In San Francisco |Tony Bennett |        0.949|
+|Peggy Sue - Single Version       |Buddy Holly  |        0.947|
+|You Send Me                      |Sam Cooke    |        0.945|
+|The Great Pretender              |The Platters |        0.943|
+
 ...and the top five "acoustic" songs in the '10s that may be driving a comeback:
 
 
@@ -84,9 +94,15 @@ Here are the five most "acoustic" songs from '50s:
 ## Joining, by = "id"
 ```
 
-```
-## Error in .::knitr: unused argument (kable)
-```
+
+
+|Name                         |Artist      | Acousticness|
+|:----------------------------|:-----------|------------:|
+|Lost Boy                     |Ruth B.     |        0.965|
+|When I Was Your Man          |Bruno Mars  |        0.932|
+|All of Me                    |John Legend |        0.920|
+|Lay Me Down - Single Version |Sam Smith   |        0.916|
+|All I Ask                    |Adele       |        0.889|
 
 ### Danceability
 
@@ -95,6 +111,7 @@ plot_metric(playlist_data, "danceability")
 ```
 
 ![plot of chunk danceability](figure/danceability-1.png)
+
 Though not totally linearly, music has generally become more "dancey" since the 50s, reaching a max in the 2000s. 
 
 These are the top classics that made the 2000s so dancey :notes:
@@ -120,18 +137,7 @@ These are the top classics that made the 2000s so dancey :notes:
 
 ### Loudness :microphone:
 Music's gotten louder! With a bump in the '10s. Here is the loudest song in each decades playlist:
-
-```
-## Joining, by = "id"
-## Joining, by = "id"
-## Joining, by = "id"
-## Joining, by = "id"
-## Joining, by = "id"
-## Joining, by = "id"
-## Joining, by = "id"
-```
-
-![plot of chunk unnamed-chunk-2](figure/unnamed-chunk-2-1.png)
+![plot of chunk loud](figure/loud-1.png)
 
 ### Valence :blush:
 
@@ -143,85 +149,10 @@ plot_metric(playlist_data, "valence")
 
 Music has been getting sadder! Here are the songs with the highest (happiest) and lowest (saddest) valence in each of the decades playlists:
 
-```r
-happy <- lapply(names(playlist_data), function(x) {
-  find_tracks(playlist_data, x, "valence", 1) %>%
-    mutate(decade = x)
-}) %>% bind_rows() 
-```
+![plot of chunk valencedots](figure/valencedots-1.png)
 
-```
-## Joining, by = "id"
-## Joining, by = "id"
-## Joining, by = "id"
-## Joining, by = "id"
-## Joining, by = "id"
-## Joining, by = "id"
-## Joining, by = "id"
-```
-
-```r
-sad <- lapply(names(playlist_data), function(x) {
-  find_tracks(playlist_data, x, "valence", 1, desc = FALSE) %>%
-    mutate(decade = x)
-}) %>% bind_rows() 
-```
-
-```
-## Joining, by = "id"
-## Joining, by = "id"
-## Joining, by = "id"
-## Joining, by = "id"
-## Joining, by = "id"
-## Joining, by = "id"
-## Joining, by = "id"
-```
-
-```r
-line_breaks <- function(nvar) {
-  vapply(seq_along(nvar), function(i) {
-    paste0(rep("\n", nvar[i] + 2), collapse = "")
-  }, character(1))
-}
-
-plot_df <- bind_rows(mutate(happy, metric = "happy"),
-          mutate(sad, metric = "sad")) %>%
-  mutate(decade = factor(decade, levels = paste0("All Out ", years, "s")),
-         Name = str_wrap(Name, 15),
-         lines = str_count(Name, "\n")) 
-plot_df$Artist <- paste0(line_breaks(plot_df$lines), plot_df$Artist)
-
-grouped_df <- plot_df %>% 
-  select(decade, metric, Valence) %>% 
-  tidyr::spread(metric, Valence)
-plot_df %>%
-  ggplot(aes(x = decade, y = Valence)) +
-  geom_segment(data = grouped_df, aes(xend = decade, y = happy, yend = sad),
-               size = 10, color = "grey50", alpha = .25) +
-  geom_point(aes(color = metric), size = 10) +
-  scale_color_manual(values = c("#ED7B68", "#1E5260"),
-                     labels = c("Highest Valence", "Lowest Valence"), 
-                     name = NULL) +
-  coord_flip() +
-  geom_text(
-    aes(label = Name,
-        hjust = ifelse(metric == "happy", 1, 0),
-        y = Valence + ifelse(metric == "happy", -1, 1) * .03
-        ), size = 3.5,
-    lineheight = .8, fontface = "bold"
-  )+
-  geom_text(
-    aes(label = Artist,
-        hjust = ifelse(metric == "happy", 1, 0),
-        y = Valence + ifelse(metric == "happy", -1, 1) * .05
-        ), size = 3.5,
-    lineheight = .8
-  ) +
-  theme(panel.grid.major.y = element_blank(),
-        legend.position = "bottom")
-```
-
-![plot of chunk unnamed-chunk-3](figure/unnamed-chunk-3-1.png)
+...and how they're distributed over time:
 
 Let's look at how they've been distributed over time...
-![plot of chunk unnamed-chunk-4](figure/unnamed-chunk-4-1.png)
+
+![plot of chunk valencedist](figure/valencedist-1.png)
