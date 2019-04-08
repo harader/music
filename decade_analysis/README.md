@@ -9,8 +9,8 @@ Spotify has a really accessible API!! In this script I use [spotifyr](https://ww
 
 In this analysis, I'll be using metrics on the songs in each decades playlist as proxies for understanding what characterized popular music in that decade. You can find all code for the analysis [here](decades.Rmd).
 
-**Table of Contents**:  
-[Reading in data](#reading-in-data)  
+## Table of Contents  
+[Accessing the Data](#accessing-the-data)  
 [Plotting the data](#plotting-the-data)  
 - [Metrics of Interest](#metrics-of-interest)  
 - [Acousticness](#acousticness)  
@@ -63,7 +63,7 @@ These are the metrics we're analyzing, as defined by [Spotify](https://developer
 - **valence:** the musical positiveness conveyed by a track  
 - **tempo:** overall estimated tempo of a track in beats per minute  
 
-It looks like there is a particularly interesting relationship between time and acousitcness, danceability, loudness, and valence!
+It looks like there is a particularly interesting relationship between time and acousticness, danceability, loudness, and valence!
 
 
 ```r
@@ -132,6 +132,9 @@ Music's gotten louder! With a bump in the '10s. Here is the loudest song in each
 
 ### Valence :blush:
 
+Valence is a measure of positiveness in a song :blush:
+
+
 ```r
 plot_metric(playlist_data, "valence")
 ```
@@ -145,3 +148,7 @@ Music has been getting sadder! Here are the songs with the highest (happiest) an
 ...and how they're distributed over time:
 
 ![plot of chunk valencedist](figure/valencedist-1.png)
+
+Cool!!!
+
+So, if we're using Spotify's Decades playlists as a proxy of music over time, we can say that music has been trending more dancey, less acoustic, louder, and sadder. [RuPaul gets it](https://open.spotify.com/track/084KnAYAeng3Oo1gCcjbth)!
