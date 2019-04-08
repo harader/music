@@ -7,7 +7,16 @@ output: html_document
 
 Spotify has a really accessible API!! In this script I use [spotifyr](https://www.rcharlie.com/spotifyr/), which integrates with the Spotify Web API using R, to analyze how songs in Spotify's Decades Playlists differ from each other.
 
-In this analysis, I'll be using metrics on the songs in each decades playlist as proxies for understanding what characterized popular music in that decade. 
+In this analysis, I'll be using metrics on the songs in each decades playlist as proxies for understanding what characterized popular music in that decade. You can find all code for the analysis [here](decades.Rmd).
+
+**Table of Contents**:  
+[Reading in data](#reading-in-data)  
+[Plotting the data](#plotting-the-data)  
+- [Metrics of Interest](#metrics-of-interest)  
+- [Acousticness](#acousticness)  
+- [Danceability](#danceability)  
+- [Loudness](#loudness-microphone)  
+- [Valence](#valence-blush)  
 
 
 
@@ -63,21 +72,15 @@ plot_metrics(playlist_data, metrics)
 
 ![plot of chunk overall](figure/overall-1.png)
 
-It looks like there is a particular interesting relationship between time and acousticness, danceability, loudness, and valence! Let's look at these more closely.
+Let's look at these more closely.
 
 ### Acousticness
 
 ![plot of chunk acousticness](figure/acousticness-1.png)
 
-Music has gotten *less* acoustic since the '50s', but with an increased bump in acousticness in the '10s (and a big increase in variance) it might be making a comeback.
+Music has gotten *less* acoustic since the '50s, but with an increased bump in acousticness in the '10s (and a big increase in variance) it might be making a comeback.
 
 Here are the five most "acoustic" songs from '50s:
-
-```
-## Joining, by = "id"
-```
-
-
 
 |Name                             |Artist       | Acousticness|
 |:--------------------------------|:------------|------------:|
@@ -88,12 +91,6 @@ Here are the five most "acoustic" songs from '50s:
 |The Great Pretender              |The Platters |        0.943|
 
 ...and the top five "acoustic" songs in the '10s that may be driving a comeback:
-
-
-```
-## Joining, by = "id"
-```
-
 
 
 |Name                         |Artist      | Acousticness|
@@ -115,12 +112,6 @@ plot_metric(playlist_data, "danceability")
 Though not totally linearly, music has generally become more "dancey" since the 50s, reaching a max in the 2000s. 
 
 These are the top classics that made the 2000s so dancey :notes:
-
-```
-## Joining, by = "id"
-```
-
-
 
 |Name               |Artist             | Danceability|
 |:------------------|:------------------|------------:|
@@ -152,7 +143,5 @@ Music has been getting sadder! Here are the songs with the highest (happiest) an
 ![plot of chunk valencedots](figure/valencedots-1.png)
 
 ...and how they're distributed over time:
-
-Let's look at how they've been distributed over time...
 
 ![plot of chunk valencedist](figure/valencedist-1.png)
