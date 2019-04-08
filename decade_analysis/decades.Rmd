@@ -1,0 +1,357 @@
+---
+title: "Decades Playlist Analysis"
+author: "Hayley Arader"
+date: "April 7, 2019"
+output: html_document
+---
+
+Spotify has a really accessible API!! In this script I use [spotifyr](https://www.rcharlie.com/spotifyr/), which integrates with the Spotify Web API using R, to analyze how songs in Spotify's Decades Playlists differ from each other.
+
+In this analysis, I'll be using metrics on the songs in each decades playlist as proxies for understanding what characterized popular music in that decade. You can find all code for the analysis [here](decades.Rmd).
+
+## Table of Contents  
+[Accessing the Data](#accessing-the-data)  
+[Plotting the data](#plotting-the-data)  
+- [Metrics of Interest](#metrics-of-interest)  
+- [Acousticness](#acousticness)  
+- [Danceability](#danceability)  
+- [Loudness](#loudness-microphone)  
+- [Valence](#valence-blush)  
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+################################################################################
+## Setup #######################################################################
+################################################################################
+
+library(spotifyr)
+library(tidyverse)
+library(stringr)
+library(ggplot2)
+
+# I've stored these in my environment
+client_id <- Sys.getenv("SPOTIFY_CLIENT_ID")
+client_secret <- Sys.getenv("SPOTIFY_CLIENT_SECRET")
+
+# Authenticate!
+access_token <- get_spotify_access_token(client_id = client_id,
+                                         client_secret = client_secret)
+
+################################################################################
+## Plotting Utils ##############################################################
+################################################################################
+
+# Set a theme for plots :)
+theme_hayley <- function(...) {
+
+  # first we'll want to update all text
+  ggplot2::update_geom_defaults(
+    "text",
+    list(family = "Raleway", size = 4, fontface = "plain", color = "black",
+      hjust = .5, vjust = .5))
+
+  # return theme
+  theme_bw() +
+    theme(plot.background = ggplot2::element_rect(fill = "white"),
+          panel.background = ggplot2::element_rect(fill = "white"),
+          panel.border = ggplot2::element_blank(),
+          text = element_text(family = "Raleway"))
+
+}
+
+# overwrite ggplot
+ggplot <- function(...) ggplot2::ggplot(...) + theme_hayley()
+
+# Function to find music
+find_tracks <- function(playlist_data, playlist, metric, n = 10, desc = TRUE) {
+  df <- playlist_data[[playlist]] %>% 
+    arrange_(.dots = paste0("desc(", metric, ")")) 
+  if (!desc) df <- df %>% arrange_(.dots = metric)
+  new <- df %>%
+    pull(id) %>% 
+    .[1:n] %>%
+    get_tracks() %>%
+    left_join(df %>% select_(.dots = c("id", metric)))
+  new$artist <- vapply(new$artists, function(x) x$name[1], character(1))
+  
+  select_expr <- c("name", "artist", metric)
+  names(select_expr) <- str_to_title(select_expr)
+  
+  new %>% select_(.dots = select_expr)
+}
+```
+
+## Accessing the data
+
+We can search Spotify for the playlists we're looking for, and filter to the playlist owner. In this case, we're looking for Spotify's Decades playlists, which all begin with `All Out`, and are owned by `Spotify`.
+```{r search}
+# Spotify has decades playlists, grab them here
+playlists <- search_spotify("All Out", type = c("playlist")) %>%
+  filter(owner.display_name == "Spotify", str_detect(name, "All Out"))
+```
+
+Now we'll read in data about each song in each playlist
+````{r read}
+# Now read in information about the songs in each playlist
+playlist_data <- lapply(seq_along(playlists$id), function(i) {
+  get_playlist_tracks(playlists$id[i]) %>%
+    pull(track.id) %>%
+    get_track_audio_features() %>%
+    mutate(name = playlists$name[i])
+})
+names(playlist_data) <- playlists$name
+```
+
+```{r plot, include = FALSE}
+################################################################################
+## Plotting Functions ##########################################################
+################################################################################
+
+# Grab the years of the playlists
+years <- str_sub(seq(from = 1950, to = 2010, by = 10), 3, 4)
+
+# Now grab the different metrics spotify provides us with
+metrics <- colnames(playlist_data[[1]])[1:11]
+
+# A function to wrangle the playlist data 
+# Assumes `playlist_data` is a list of data
+# @param data list of data, expects `playlist_data`
+# @param metrics_to_plot character of which metrics we're interested in plotting
+wrangle_data <- function(data, metrics_to_plot) {
+  data %>%
+    bind_rows() %>%
+    # make the data long
+    tidyr::gather(metric, stat, metrics) %>%
+    group_by(name, metric) %>%
+    # Find stats
+    summarize(mean = mean(stat), sd = sd(stat)) %>%
+    # let's order by year
+    ungroup() %>%
+    filter(metric %in% metrics_to_plot) %>%
+    mutate(name = factor(name, levels = paste0("All Out ", years, "s")),
+           metric = str_to_title(metric))
+}
+
+# Function to plot the wrangled data
+# @param data dataframe the wrangled data from `wrangle_data`
+plot_data <- function(data) {
+ data %>%
+   ggplot(aes(x = name, color = mean)) +
+    # plot error bars
+    geom_segment(aes(y = mean - sd, yend = mean + sd, xend = name),
+                 color = "grey50", alpha = .5, size = 3) +
+    geom_point(aes(y = mean), size = 7) +
+    labs(x = "Decade", y = "Mean Value in Playlist") +
+    guides(color = F) +
+    expand_limits(x = c(-1, 1)) +
+    scale_x_discrete(label = function(x) {
+      paste0("'", stringr::str_remove(x, "All Out "))
+    }) +
+    theme(axis.text = element_text(size = 12),
+          strip.text = element_text(face = "bold")) +
+    facet_wrap(~metric, scales = "free_y")
+}
+
+# Put functions together
+# @param data list of data, expects `playlist_data`
+# @param metrics_to_plot character of which metrics we're interested in plotting
+plot_metrics <- function(data, metrics_to_plot) {
+  data %>%
+    wrangle_data(metrics_to_plot) %>%
+    plot_data()
+}
+
+# Function to add an annotation explaining what's happening
+# in the group
+# @param p plot to add the metric to
+# @param metric character the name of the metric to add the annotation
+add_annotation <- function(p, metric) {
+  # dynamically find a yvalue that will make sense
+  yval <- (max(p$data$mean) - min(p$data$mean)) / 6
+  ymean <- mean(p$data$mean)
+  p +
+    annotate("label", x = 0, y = ymean,
+             label = paste0("Music with\nHigher Avg\n", str_to_title(metric)),
+             label.size = 0, family = "Raleway", lineheight = .8,
+             fontface = "bold", size = 5) +
+    annotate("segment", x = 0, y = ymean + yval, yend = ymean + 2 * yval, xend = 0,
+             arrow = arrow(length = grid::unit(.25, "cm")), size = 1)
+}
+
+# Function to plot just one metric
+# @param data list of data, expects `playlist_data`
+# @param metric character the name of the metric to plot
+plot_metric <- function(data, metric) {
+  plot_metrics(playlist_data, metric) %>%
+    add_annotation(metric)
+}
+```
+
+## Plotting the data
+
+Let's look at all of the metrics, and how they're different across time. 
+
+### Metrics of Interest
+These are the metrics we're analyzing, as defined by [Spotify](https://developer.spotify.com/documentation/web-api/reference/tracks/get-audio-features/) (summaries of definitions below)
+- **danceability:** how suitable a track is for dancing based on a combination of musical elements including tempo, rhythm stability, beat strength, and overall regularity  
+- **energy:** a perceptual measure of intensity and activity  
+- **key:** estimated overall key of the track  
+- **loudness:** overall loudness of a track in decibels  
+- **mode:** modality (major or minor) of a track  
+- **speechiness:** the presence of spoken words in a track  
+- **acousticness:** a confidence measure of whether the music is acoustic  
+- **instrumentalness:** predicts whether a track contains no vocals  
+- **liveness:** detects the presence of an audience in the recording  
+- **valence:** the musical positiveness conveyed by a track  
+- **tempo:** overall estimated tempo of a track in beats per minute  
+
+It looks like there is a particularly interesting relationship between time and acousticness, danceability, loudness, and valence!
+
+```{r overall, warn = FALSE, message = FALSE, fig.height = 5, fig.width = 10}
+plot_metrics(playlist_data, metrics)
+```
+
+Let's look at these more closely.
+
+### Acousticness
+
+```{r acousticness, echo = FALSE, warn = FALSE, message = FALSE}
+plot_metric(playlist_data, "acousticness")
+```
+
+Music has gotten *less* acoustic since the '50s, but with an increased bump in acousticness in the '10s (and a big increase in variance) it might be making a comeback.
+
+Here are the five most "acoustic" songs from '50s:
+```{r acoustic50s, echo = FALSE, message = FALSE, warn = FALSE}
+find_tracks(playlist_data, "All Out 50s", "acousticness", 5) %>%
+  knitr::kable()
+```
+
+...and the top five "acoustic" songs in the '10s that may be driving a comeback:
+
+```{r acoustic10s, echo = FALSE, message = FALSE, warn = FALSE}
+find_tracks(playlist_data, "All Out 10s", "acousticness", 5) %>%
+  knitr::kable()
+```
+
+### Danceability
+```{r danceability, warn = FALSE, message = FALSE}
+plot_metric(playlist_data, "danceability")
+```
+
+Though not totally linearly, music has generally become more "dancey" since the 50s, reaching a max in the 2000s. 
+
+These are the top classics that made the 2000s so dancey :notes:
+```{r topdance, echo = FALSE, message = FALSE, warn = FALSE}
+find_tracks(playlist_data, "All Out 00s", "danceability") %>%
+  knitr::kable()
+```
+
+### Loudness :microphone:
+Music's gotten louder! With a bump in the '10s. Here is the loudest song in each decades playlist:
+```{r loud, echo = FALSE, message = FALSE, warn = FALSE}
+pdf <- lapply(names(playlist_data), function(x) {
+  find_tracks(playlist_data, x, "loudness", 5) %>%
+    mutate(decade = x)
+}) %>% bind_rows() %>%
+  # remove outliers
+  filter(Loudness > -60, Loudness < 0) %>%
+  group_by(decade) %>%
+  filter(Loudness == max(Loudness)) %>%
+  ungroup() %>%
+  mutate(decade = factor(decade, levels = paste0("All Out ", years, "s"))) 
+pdf %>%
+  ggplot(aes(x = decade, y = Loudness)) +
+  geom_bar(stat = "identity", aes(fill = Loudness)) +
+  geom_text(aes(label = str_wrap(Name, 10)), y = 1, fontface = "bold", 
+            size = 3.5, lineheight = .8, vjust = 0) +
+  geom_text(aes(label = str_wrap(Artist, 10)), y = 0.75, size = 3, lineheight = .8, vjust = 1) +
+  scale_y_continuous(limits = c(-6, 2.5)) +
+  theme(panel.grid.major.x = element_blank(),
+        legend.position = "bottom") + 
+  labs(x = "Decade", title = "Loudest Song in Each Decade Playlist",
+       y = "Loudness (dBs)")
+```
+
+### Valence :blush:
+
+Valence is a measure of positiveness in a song :blush:
+
+```{r valence, warn = FALSE, message = FALSE}
+plot_metric(playlist_data, "valence")
+```
+
+Music has been getting sadder! Here are the songs with the highest (happiest) and lowest (saddest) valence in each of the decades playlists:
+
+```{r valencedots, echo = FALSE, message = FALSE, warn = FALSE}
+happy <- lapply(names(playlist_data), function(x) {
+  find_tracks(playlist_data, x, "valence", 1) %>%
+    mutate(decade = x)
+}) %>% bind_rows() 
+
+sad <- lapply(names(playlist_data), function(x) {
+  find_tracks(playlist_data, x, "valence", 1, desc = FALSE) %>%
+    mutate(decade = x)
+}) %>% bind_rows() 
+
+line_breaks <- function(nvar) {
+  vapply(seq_along(nvar), function(i) {
+    paste0(rep("\n", nvar[i] + 2), collapse = "")
+  }, character(1))
+}
+
+plot_df <- bind_rows(mutate(happy, metric = "happy"),
+          mutate(sad, metric = "sad")) %>%
+  mutate(decade = factor(decade, levels = paste0("All Out ", years, "s")),
+         Name = str_wrap(Name, 15),
+         lines = str_count(Name, "\n")) 
+plot_df$Artist <- paste0(line_breaks(plot_df$lines), plot_df$Artist)
+
+grouped_df <- plot_df %>% 
+  select(decade, metric, Valence) %>% 
+  tidyr::spread(metric, Valence)
+plot_df %>%
+  ggplot(aes(x = decade, y = Valence)) +
+  geom_segment(data = grouped_df, aes(xend = decade, y = happy, yend = sad),
+               size = 10, color = "grey50", alpha = .25) +
+  geom_point(aes(color = metric), size = 10) +
+  scale_color_manual(values = c("#ED7B68", "#1E5260"),
+                     labels = c("Highest Valence", "Lowest Valence"), 
+                     name = NULL) +
+  coord_flip() +
+  geom_text(
+    aes(label = Name,
+        hjust = ifelse(metric == "happy", 1, 0),
+        y = Valence + ifelse(metric == "happy", -1, 1) * .03
+        ), size = 3.5,
+    lineheight = .8, fontface = "bold"
+  )+
+  geom_text(
+    aes(label = Artist,
+        hjust = ifelse(metric == "happy", 1, 0),
+        y = Valence + ifelse(metric == "happy", -1, 1) * .05
+        ), size = 3.5,
+    lineheight = .8
+  ) +
+  theme(panel.grid.major.y = element_blank(),
+        legend.position = "bottom")
+```
+
+...and how they're distributed over time:
+
+```{r valencedist, echo = FALSE, message = FALSE, warn = FALSE}
+playlist_data %>% 
+  bind_rows() %>% 
+    mutate(name = factor(name, levels = paste0("All Out ", years, "s"))) %>%
+  ggplot(aes(x = valence, color = name)) + 
+  geom_density(size = 2) + 
+  scale_color_manual(
+    values = grDevices::colorRampPalette(c("#b3e6ff", "#00111a"))(8), name = "Playlist") +
+  labs(title = "Distribution of Valence Over Time",
+       x = "Valence", y = "Density")
+```
+
+Cool!!!
+
+So, if we're using Spotify's Decades playlists as a proxy of music over time, we can say that music has been trending more dancey, less acoustic, louder, and sadder. [RuPaul gets it](https://open.spotify.com/track/084KnAYAeng3Oo1gCcjbth)!
